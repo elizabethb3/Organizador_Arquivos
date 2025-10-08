@@ -1,6 +1,6 @@
 import os
 import shutil
-from pathlib import path
+from pathlib import Path
 from datetime import datetime
 import logging
 import config
@@ -16,7 +16,7 @@ logging.basicConfig(
     ]
 )
 
-def obter_categoria(extesao):
+def obter_categoria(extensao):
     #Determina a categoria de um arquivo baseado em sua extensão
 
     extensao = extensao.lower()
@@ -49,7 +49,7 @@ def criar_pasta_destino(categoria, data=None):
     else:
         pasta_destino = pasta_base
     
-    pasta_destino.mkdir(parents=True, mode=0o755)
+    pasta_destino.mkdir(parents=True, exist_ok=True, mode=0o755)
 
     return pasta_destino
 
@@ -74,8 +74,76 @@ def mover_arquivo(origem, destino):
         logging.info(f"✓ Movido: {origem.name} → {arquivo_destino}")
         return True
     except PermissionError as e:
-        logging.error("✗ Sem permissão para mover {origem.name}: {e}")
+        logging.error(f"✗ Sem permissão para mover {origem.name}: {e}")
         return False
     except Exception as e:
         logging.error(f"✗ Erro ao mover {origem.name}: {e}")
         return False
+
+def organizar_arquivos():
+    #Função principal que organiza todos os arquivos da pasta monitorada
+
+    pasta = config.PASTA_MONITORADA
+
+    if not pasta.exists():
+        logging.error(f"Pasta não encontrada: {pasta}")
+        return
+    
+    #Verificar permissões de leitura
+    if not os.access(pasta, os.R_OK):
+        logging.error(f"Sem permisão de leitura em: {pasta}")
+        return
+    
+    logging.info(f"Iniciando organização de: {pasta}")
+    logging.info('=' * 50)
+
+    arquivos_movidos = 0
+    arquivos_ignorados = 0
+
+    #Listar arquivos (não pastas)
+    for item in pasta.iterdir():
+        if item.is_file():
+            #ignorar arquivos ocultos
+            if item.name.startswith('.'):
+                continue
+
+            extensao = item.suffix
+
+            if not extensao:
+                logging.warning(f"Ignorado (sem extensão): {item.name}")
+                arquivos_ignorados +=1
+                continue
+            #Determinar categoria e pasta de destino 
+            categoria = obter_categoria(extensao)
+            data = obter_data_modificacao(item) if config.ORGANIZADOR_POR_DATA else None
+            pasta_destino = criar_pasta_destino(categoria, data)
+
+            #Mover aquivo
+            if mover_arquivo(item, pasta_destino):
+                arquivos_movidos +=1
+            else:
+                arquivos_ignorados +=1
+
+    #Resumo final
+    logging.info("=" * 50)
+    logging.info(f"Organização concluída!")
+    logging.info(f"Arquivos movidos: {arquivos_movidos}")
+    logging.info(f"Arquivos ignorados: {arquivos_ignorados}")
+
+
+if __name__ == "__main__" :
+#Ponto de entrada do script
+    
+    print("Organizador Automático de Arquivos - Ubuntu")
+    print(f"Pasta: {config.PASTA_MONITORADA}")
+    print("-" * 50)
+
+try:
+    organizar_arquivos()
+except KeyboardInterrupt:
+    print("\nOperação cancelada pelo usuário")
+except Exception as e:
+    logging.error(f"Erro inesperado: {e}")
+
+print("-" * 50)
+print("Processo finalizado! Verifique os logs para detalhes.")
